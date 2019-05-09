@@ -241,6 +241,15 @@ static int set_framesize(sensor_t *sensor, framesize_t framesize)
 
     WRITE_REG_OR_RETURN(BANK_DSP, R_BYPASS, R_BYPASS_DSP_BYPAS);
     WRITE_REGS_OR_RETURN(regs);
+    if (sensor->pixformat == PIXFORMAT_JPEG && sensor->xclk_freq_hz == 10000000) {
+        if (framesize <= FRAMESIZE_CIF) {
+            WRITE_REG_OR_RETURN(BANK_SENSOR, CLKRC, CLKRC_2X_CIF);
+        } else if (framesize <= FRAMESIZE_SVGA) {
+            WRITE_REG_OR_RETURN(BANK_SENSOR, CLKRC, CLKRC_2X_SVGA);
+        } else {
+            WRITE_REG_OR_RETURN(BANK_SENSOR, CLKRC, CLKRC_2X_UXGA);
+        }
+    }
     WRITE_REG_OR_RETURN(BANK_DSP, ZMOW, (w>>2)&0xFF); // OUTW[7:0] (real/4)
     WRITE_REG_OR_RETURN(BANK_DSP, ZMOH, (h>>2)&0xFF); // OUTH[7:0] (real/4)
     WRITE_REG_OR_RETURN(BANK_DSP, ZMHH, ((h>>8)&0x04)|((w>>10)&0x03)); // OUTH[8]/OUTW[9:8]
@@ -414,8 +423,10 @@ static int set_hmirror_sensor(sensor_t *sensor, int enable)
 
 static int set_vflip_sensor(sensor_t *sensor, int enable)
 {
+    int ret = 0;
     sensor->status.vflip = enable;
-    return write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VFLIP_IMG, enable?1:0);
+    ret = write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VREF_EN, enable?1:0);
+    return ret & write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VFLIP_IMG, enable?1:0);
 }
 
 static int set_raw_gma_dsp(sensor_t *sensor, int enable)
@@ -460,6 +471,17 @@ static int set_wpc_dsp(sensor_t *sensor, int enable)
     return set_reg_bits(sensor, BANK_DSP, CTRL3, 6, 1, enable?1:0);
 }
 
+//unsupported
+static int set_sharpness(sensor_t *sensor, int level)
+{
+   return -1;
+}
+
+static int set_denoise(sensor_t *sensor, int level)
+{
+   return -1;
+}
+
 static int init_status(sensor_t *sensor){
     sensor->status.brightness = 0;
     sensor->status.contrast = 0;
@@ -496,6 +518,9 @@ static int init_status(sensor_t *sensor){
     sensor->status.vflip = get_reg_bits(sensor, BANK_SENSOR, REG04, 6, 1);
     sensor->status.dcw = get_reg_bits(sensor, BANK_DSP, CTRL2, 5, 1);
     sensor->status.colorbar = get_reg_bits(sensor, BANK_SENSOR, COM7, 1, 1);
+
+    sensor->status.sharpness = 0;//not supported
+    sensor->status.denoise = 0;
     return 0;
 }
 
@@ -534,6 +559,9 @@ int ov2640_init(sensor_t *sensor)
     sensor->set_raw_gma = set_raw_gma_dsp;
     sensor->set_lenc = set_lenc_dsp;
 
+    //not supported
+    sensor->set_sharpness = set_sharpness;
+    sensor->set_denoise = set_denoise;
     ESP_LOGD(TAG, "OV2640 Attached");
     return 0;
 }
